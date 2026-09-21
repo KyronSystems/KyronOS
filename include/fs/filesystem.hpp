@@ -34,6 +34,7 @@ public:
     const Superblock& superblock() const;
     bool read_inode(uint32_t inode, Inode& value) const;
     bool find(uint32_t parent, const char* name, uint32_t& inode) const;
+    bool resolve_path(uint32_t starting_inode, const char* path, uint32_t& inode) const;
     bool create_directory(uint32_t parent, const char* name, uint32_t& inode);
     bool create_file(uint32_t parent, const char* name, const char* data, uint32_t size, uint32_t& inode);
     bool read_file(uint32_t inode, void* buffer, uint32_t capacity, uint32_t& size) const;

@@ -32,8 +32,19 @@ int main() {
     assert(filesystem.format(32));
     uint32_t documents = 0;
     assert(filesystem.create_directory(kyron::fs::KSFS_ROOT_INODE, "documents", documents));
+    uint32_t projects = 0;
+    assert(filesystem.create_directory(documents, "projects", projects));
     uint32_t note = 0;
     assert(filesystem.create_file(documents, "note.txt", "persistent", 10, note));
+    uint32_t todo = 0;
+    assert(filesystem.create_file(projects, "todo.txt", "planned", 7, todo));
+
+    uint32_t resolved_documents = 0;
+    assert(filesystem.resolve_path(kyron::fs::KSFS_ROOT_INODE, "/documents", resolved_documents));
+    assert(resolved_documents == documents);
+    uint32_t resolved_project_file = 0;
+    assert(filesystem.resolve_path(documents, "projects/todo.txt", resolved_project_file));
+    assert(resolved_project_file == todo);
 
     kyron::fs::FileSystem remounted(device);
     assert(remounted.mount());

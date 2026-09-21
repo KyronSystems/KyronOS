@@ -103,6 +103,44 @@ bool FileSystem::find(uint32_t parent, const char* name, uint32_t& inode) const 
     return false;
 }
 
+bool FileSystem::resolve_path(uint32_t starting_inode, const char* path, uint32_t& inode) const {
+    if (!is_mounted || !path || !*path) return false;
+    uint32_t current = starting_inode == 0 ? KSFS_ROOT_INODE : starting_inode;
+    if (path[0] == '/') {
+        current = KSFS_ROOT_INODE;
+        ++path;
+    }
+    while (*path) {
+        while (*path == '/') ++path;
+        if (!*path) break;
+        char component[KSFS_NAME_SIZE]{};
+        uint32_t length = 0;
+        while (path[length] && path[length] != '/' && length + 1 < sizeof(component)) {
+            component[length] = path[length];
+            ++length;
+        }
+        if (length == 0) continue;
+        component[length] = 0;
+        if (same_text(component, ".")) {
+            path += length;
+            continue;
+        }
+        if (same_text(component, "..")) {
+            Inode parent{};
+            if (!::read_inode(*this, current, parent)) return false;
+            current = parent.parent;
+            path += length;
+            continue;
+        }
+        uint32_t next = 0;
+        if (!find(current, component, next)) return false;
+        current = next;
+        path += length;
+    }
+    inode = current;
+    return true;
+}
+
 bool FileSystem::create_directory(uint32_t parent, const char* name, uint32_t& inode) {
     return create_file(parent, name, nullptr, 0, inode);
 }

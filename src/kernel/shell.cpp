@@ -58,6 +58,40 @@ uint32_t directory_for_path(const char* path, uint32_t starting_directory) {
     }
     return directory;
 }
+bool split_parent_and_name(const char* path, uint32_t starting_directory, uint32_t& parent, char* name, uint32_t capacity) {
+    if (!path || !*path || !name || capacity == 0) return false;
+    char buffer[128];
+    uint32_t index = 0;
+    while (path[index] && index + 1 < sizeof(buffer)) { buffer[index] = path[index]; ++index; }
+    buffer[index] = 0;
+    if (buffer[0] == '/' && buffer[1] == 0) return false;
+    uint32_t last_slash = 0;
+    for (uint32_t i = 0; buffer[i]; ++i) if (buffer[i] == '/') last_slash = i;
+    if (buffer[0] == '/' && last_slash == 0) {
+        parent = 0;
+        copy(name, buffer + 1, capacity);
+        return *name != 0;
+    }
+    if (last_slash == 0) {
+        parent = starting_directory;
+        copy(name, buffer, capacity);
+        return true;
+    }
+    char parent_path[128];
+    for (uint32_t i = 0; i < last_slash; ++i) parent_path[i] = buffer[i];
+    parent_path[last_slash] = 0;
+    parent = directory_for_path(parent_path, starting_directory);
+    if (parent == max_entries) return false;
+    copy(name, buffer + last_slash + 1, capacity);
+    return *name != 0;
+}
+Entry* resolve_entry_path(const char* path, uint32_t starting_directory) {
+    uint32_t parent = 0;
+    char name_buffer[name_size];
+    if (!split_parent_and_name(path, starting_directory, parent, name_buffer, sizeof(name_buffer))) return nullptr;
+    if (parent == max_entries) return nullptr;
+    return find(name_buffer, parent);
+}
 Entry* create(const char* name, bool directory, uint32_t parent) {
     if (!*name || length(name) >= name_size || find(name, parent)) return nullptr;
     for (uint32_t i = 0; i < max_entries; ++i) if (!entries[i].used) { entries[i].used = true; entries[i].directory = directory; entries[i].parent = parent; copy(entries[i].name, name, name_size); return &entries[i]; }
@@ -139,28 +173,35 @@ void list(uint32_t directory) {
     for (uint32_t i = 0; i < max_entries; ++i) if (entries[i].used && entries[i].parent == directory) { console::write(entries[i].name); console::write_line(entries[i].directory ? "/" : ""); }
 }
 void change_directory(const char* target) {
+    if (!target || !*target) { console::write_line("Directory not found.", 0x0C); return; }
     uint32_t old_directory = current_directory;
-    if (equals(target, "/")) current_directory = 0;
-    else if (equals(target, "..")) current_directory = entries[current_directory].parent;
-    else {
-        uint32_t parent = current_directory;
-        if (*target == '/') { parent = 0; ++target; }
-        Entry* entry = find(target, parent);
-        if (!entry || !entry->directory) { console::write_line("Directory not found.", 0x0C); return; }
-        current_directory = static_cast<uint32_t>(entry - entries);
+    uint32_t next_directory = directory_for_path(target, current_directory);
+    if (next_directory == max_entries || !entries[next_directory].directory) {
+        console::write_line("Directory not found.", 0x0C); return;
     }
+    current_directory = next_directory;
     previous_directory = old_directory;
     refresh_path();
 }
 void go_back() { uint32_t swap = current_directory; current_directory = previous_directory; previous_directory = swap; refresh_path(); }
 void go_home() { previous_directory = current_directory; current_directory = users[current_user].home; refresh_path(); }
 void go_root() { previous_directory = current_directory; current_directory = 0; refresh_path(); }
-void remove_entry(const char* name) { Entry* entry = find(name, current_directory); if (!entry) { console::write_line("File not found.", 0x0C); return; } entry->used = false; }
+void remove_entry(const char* path) {
+    Entry* entry = resolve_entry_path(path, current_directory);
+    if (!entry) { console::write_line("File not found.", 0x0C); return; }
+    entry->used = false;
+}
 void write_file(const char* command, bool append) {
     const char* name = command; while (*name == ' ') ++name;
     char file_name[name_size]; uint32_t index = 0; while (name[index] && name[index] != ' ' && index + 1 < name_size) { file_name[index] = name[index]; ++index; } file_name[index] = 0;
     const char* text = name + index; while (*text == ' ') ++text;
-    Entry* entry = find(file_name, current_directory); if (!entry && !append) entry = create(file_name, false, current_directory);
+    uint32_t parent = 0;
+    char target_name[name_size];
+    if (!split_parent_and_name(file_name, current_directory, parent, target_name, sizeof(target_name))) {
+        console::write_line("Unable to write file.", 0x0C); return;
+    }
+    Entry* entry = find(target_name, parent);
+    if (!entry && !append) entry = create(target_name, false, parent);
     if (!entry || entry->directory) { console::write_line("Unable to write file.", 0x0C); return; }
     uint32_t offset = append ? length(entry->data) : 0; uint32_t available = data_size - offset;
     for (uint32_t i = 0; i + 1 < available && text[i]; ++i) entry->data[offset + i] = text[i];
@@ -224,16 +265,33 @@ void command(char* line) {
     else if (equals(line, "reboot")) { asm volatile("cli; hlt"); }
     else if (equals(line, "shutdown")) { asm volatile("cli; hlt"); }
     else if (line[0] == 'e' && line[1] == 'c' && line[2] == 'h' && line[3] == 'o' && line[4] == ' ') console::write_line(argument(line));
-    else if (line[0] == 'c' && line[1] == 'a' && line[2] == 't' && line[3] == ' ') { Entry* entry = find(argument(line), current_directory); if (entry && !entry->directory) console::write_line(entry->data); else console::write_line("File not found.", 0x0C); }
+    else if (line[0] == 'c' && line[1] == 'a' && line[2] == 't' && line[3] == ' ') {
+        Entry* entry = resolve_entry_path(argument(line), current_directory);
+        if (entry && !entry->directory) console::write_line(entry->data); else console::write_line("File not found.", 0x0C);
+    }
     else if (line[0] == 'l' && line[1] == 's' && line[2] == ' ') {
         uint32_t directory = directory_for_path(argument(line), current_directory);
         if (directory == max_entries) console::write_line("Directory not found.", 0x0C); else list(directory);
     }
     else if (line[0] == 't' && line[1] == 'o' && line[2] == 'u' && line[3] == 'c' && line[4] == 'h' && line[5] == ' ') {
-        console::write_line(create(argument(line), false, current_directory) ? "OK" : "Unable to create file.", 0x0B);
+        char file_name[name_size];
+        uint32_t parent = 0;
+        const char* target = argument(line);
+        if (!split_parent_and_name(target, current_directory, parent, file_name, sizeof(file_name))) {
+            console::write_line("Unable to create file.", 0x0B);
+        } else {
+            console::write_line(create(file_name, false, parent) ? "OK" : "Unable to create file.", 0x0B);
+        }
     }
     else if (line[0] == 'm' && line[1] == 'k' && line[2] == 'd' && line[3] == 'i' && line[4] == 'r' && line[5] == ' ') {
-        console::write_line(create(argument(line), true, current_directory) ? "OK" : "Unable to create directory.", 0x0B);
+        char file_name[name_size];
+        uint32_t parent = 0;
+        const char* target = argument(line);
+        if (!split_parent_and_name(target, current_directory, parent, file_name, sizeof(file_name))) {
+            console::write_line("Unable to create directory.", 0x0B);
+        } else {
+            console::write_line(create(file_name, true, parent) ? "OK" : "Unable to create directory.", 0x0B);
+        }
     }
     else if (line[0] == 'r' && line[1] == 'm' && line[2] == ' ') remove_entry(argument(line));
     else if (line[0] == 'r' && line[1] == 'm' && line[2] == 'd' && line[3] == 'i' && line[4] == 'r' && line[5] == ' ') remove_entry(argument(line));
