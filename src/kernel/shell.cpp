@@ -94,7 +94,14 @@ Entry* resolve_entry_path(const char* path, uint32_t starting_directory) {
 }
 Entry* create(const char* name, bool directory, uint32_t parent) {
     if (!*name || length(name) >= name_size || find(name, parent)) return nullptr;
-    for (uint32_t i = 0; i < max_entries; ++i) if (!entries[i].used) { entries[i].used = true; entries[i].directory = directory; entries[i].parent = parent; copy(entries[i].name, name, name_size); return &entries[i]; }
+    for (uint32_t i = 0; i < max_entries; ++i) if (!entries[i].used) {
+        entries[i].used = true;
+        entries[i].directory = directory;
+        entries[i].parent = parent;
+        entries[i].data[0] = 0;
+        copy(entries[i].name, name, name_size);
+        return &entries[i];
+    }
     return nullptr;
 }
 Entry* create_file(const char* name, uint32_t parent, const char* contents) {
@@ -142,7 +149,7 @@ void help() {
     console::write_line("  touch <file>         create a file", 0x0B);
     console::write_line("  mkdir <directory>    create a directory", 0x0B);
     console::write_line("  rmdir <directory>    remove a directory", 0x0B);
-    console::write_line("  write <file> <text>   replace file contents", 0x0B);
+    console::write_line("  write <file> [text]   edit or replace file contents", 0x0B);
     console::write_line("  append <file> <text>  append to a file", 0x0B);
     console::write_line("  cat <file>           print a file", 0x0B);
     console::write_line("  rm <file>            remove a file", 0x0B);
@@ -155,7 +162,7 @@ void command_help(const char* name) {
     else if (equals(name, "touch")) console::write_line("touch <file> - create an empty file.", 0x0B);
     else if (equals(name, "mkdir")) console::write_line("mkdir <directory> - create a directory.", 0x0B);
     else if (equals(name, "rmdir")) console::write_line("rmdir <directory> - remove a directory.", 0x0B);
-    else if (equals(name, "write")) console::write_line("write <file> <text> - replace file contents.", 0x0B);
+    else if (equals(name, "write")) console::write_line("write <file> [text] - edit interactively or replace file contents.", 0x0B);
     else if (equals(name, "append")) console::write_line("append <file> <text> - append to a file.", 0x0B);
     else if (equals(name, "cat")) console::write_line("cat <file> - print file contents.", 0x0B);
     else if (equals(name, "rm")) console::write_line("rm <file> - remove a file.", 0x0B);
@@ -191,6 +198,86 @@ void remove_entry(const char* path) {
     if (!entry) { console::write_line("File not found.", 0x0C); return; }
     entry->used = false;
 }
+void edit_file(Entry* entry) {
+    char buffer[data_size];
+    copy(buffer, entry->data, sizeof(buffer));
+    uint32_t buffer_length = length(buffer);
+    uint32_t cursor = buffer_length;
+    char clipboard[data_size]{};
+    while (true) {
+        console::editor_draw(entry->name, buffer, buffer_length, cursor);
+        uint16_t key = keyboard::read_key();
+        if (key == keyboard::key_ctrl_shift_x) {
+            for (uint32_t index = 0; index < buffer_length; ++index) entry->data[index] = buffer[index];
+            entry->data[buffer_length] = 0;
+            console::clear();
+            console::write_line("Saved.", 0x0B);
+            return;
+        }
+        if (key == keyboard::key_left) { if (cursor > 0) --cursor; }
+        else if (key == keyboard::key_right) { if (cursor < buffer_length) ++cursor; }
+        else if (key == keyboard::key_up || key == keyboard::key_down) {
+            uint32_t line_start = cursor;
+            while (line_start > 0 && buffer[line_start - 1] != '\n') --line_start;
+            uint32_t column = cursor - line_start;
+            if (key == keyboard::key_up && line_start > 0) {
+                uint32_t previous_end = line_start - 1;
+                uint32_t previous_start = previous_end;
+                while (previous_start > 0 && buffer[previous_start - 1] != '\n') --previous_start;
+                uint32_t previous_length = previous_end - previous_start;
+                cursor = previous_start + (column < previous_length ? column : previous_length);
+            } else if (key == keyboard::key_down) {
+                uint32_t next_start = cursor;
+                while (next_start < buffer_length && buffer[next_start] != '\n') ++next_start;
+                if (next_start < buffer_length) {
+                    ++next_start;
+                    uint32_t next_end = next_start;
+                    while (next_end < buffer_length && buffer[next_end] != '\n') ++next_end;
+                    uint32_t next_length = next_end - next_start;
+                    cursor = next_start + (column < next_length ? column : next_length);
+                }
+            }
+        }
+        else if (key == '\b' && cursor > 0) {
+            for (uint32_t index = cursor - 1; index < buffer_length; ++index) buffer[index] = buffer[index + 1];
+            --cursor;
+            --buffer_length;
+        }
+        else if (key == keyboard::key_delete && cursor < buffer_length) {
+            for (uint32_t index = cursor; index < buffer_length; ++index) buffer[index] = buffer[index + 1];
+            --buffer_length;
+        }
+        else if (key == '\n' && buffer_length + 1 < data_size) {
+            for (uint32_t index = buffer_length; index > cursor; --index) buffer[index] = buffer[index - 1];
+            buffer[cursor++] = '\n';
+            ++buffer_length;
+        }
+        else if (key == keyboard::key_ctrl_c) {
+            uint32_t start = cursor;
+            while (start > 0 && buffer[start - 1] != '\n') --start;
+            uint32_t end = cursor;
+            while (end < buffer_length && buffer[end] != '\n') ++end;
+            uint32_t copy_length = end - start;
+            for (uint32_t index = 0; index < copy_length; ++index) clipboard[index] = buffer[start + index];
+            clipboard[copy_length] = 0;
+        }
+        else if (key == keyboard::key_ctrl_v) {
+            uint32_t paste_length = length(clipboard);
+            if (paste_length > data_size - 1 - buffer_length) paste_length = data_size - 1 - buffer_length;
+            for (uint32_t index = buffer_length; paste_length > 0 && index > cursor; --index)
+                buffer[index + paste_length - 1] = buffer[index - 1];
+            for (uint32_t index = 0; index < paste_length; ++index) buffer[cursor + index] = clipboard[index];
+            buffer_length += paste_length;
+            cursor += paste_length;
+        }
+        else if (key < 0x100 && key >= 32 && key <= 126 && buffer_length + 1 < data_size) {
+            for (uint32_t index = buffer_length; index > cursor; --index) buffer[index] = buffer[index - 1];
+            buffer[cursor++] = static_cast<char>(key);
+            ++buffer_length;
+        }
+        buffer[buffer_length] = 0;
+    }
+}
 void write_file(const char* command, bool append) {
     const char* name = command; while (*name == ' ') ++name;
     char file_name[name_size]; uint32_t index = 0; while (name[index] && name[index] != ' ' && index + 1 < name_size) { file_name[index] = name[index]; ++index; } file_name[index] = 0;
@@ -203,9 +290,16 @@ void write_file(const char* command, bool append) {
     Entry* entry = find(target_name, parent);
     if (!entry && !append) entry = create(target_name, false, parent);
     if (!entry || entry->directory) { console::write_line("Unable to write file.", 0x0C); return; }
-    uint32_t offset = append ? length(entry->data) : 0; uint32_t available = data_size - offset;
-    for (uint32_t i = 0; i + 1 < available && text[i]; ++i) entry->data[offset + i] = text[i];
-    entry->data[data_size - 1] = 0; console::write_line("OK", 0x0B);
+    if (!*text && !append) { edit_file(entry); return; }
+    uint32_t offset = append ? length(entry->data) : 0;
+    if (!append) entry->data[0] = 0;
+    index = 0;
+    while (text[index] && offset + index + 1 < data_size) {
+        entry->data[offset + index] = text[index];
+        ++index;
+    }
+    entry->data[offset + index] = 0;
+    console::write_line("OK", 0x0B);
 }
 uint32_t complete(char* buffer, uint32_t input_length, uint32_t capacity) {
     uint32_t start = input_length;
@@ -251,7 +345,7 @@ void command(char* line) {
     }
     if (equals(line, "help")) help();
     else if (equals(line, "clear")) console::clear();
-    else if (equals(line, "version") || equals(line, "about")) console::write_line("KyronOS Alpha 2", 0x0D);
+    else if (equals(line, "version") || equals(line, "about")) console::write_line("KyronOS", 0x0D);
     else if (equals(line, "go back")) go_back();
     else if (equals(line, "go home")) go_home();
     else if (equals(line, "go root")) go_root();
@@ -261,7 +355,7 @@ void command(char* line) {
     else if (equals(line, "pwd")) console::write_line(cwd, 0x0B);
     else if (equals(line, "ls")) list(current_directory);
     else if (equals(line, "devices")) console::write_line("CPU: x86 | Keyboard: PS/2 | Storage: RAM KSFS", 0x0B);
-    else if (equals(line, "mem")) console::write_line("Memory information unavailable in Alpha 2 bootstrap.", 0x0D);
+    else if (equals(line, "mem")) console::write_line("Memory information unavailable in this KyronOS build.", 0x0D);
     else if (equals(line, "reboot")) { asm volatile("cli; hlt"); }
     else if (equals(line, "shutdown")) { asm volatile("cli; hlt"); }
     else if (line[0] == 'e' && line[1] == 'c' && line[2] == 'h' && line[3] == 'o' && line[4] == ' ') console::write_line(argument(line));
@@ -280,7 +374,9 @@ void command(char* line) {
         if (!split_parent_and_name(target, current_directory, parent, file_name, sizeof(file_name))) {
             console::write_line("Unable to create file.", 0x0B);
         } else {
-            console::write_line(create(file_name, false, parent) ? "OK" : "Unable to create file.", 0x0B);
+            Entry* existing = find(file_name, parent);
+            if (existing && !existing->directory) console::write_line("OK", 0x0B);
+            else console::write_line(create(file_name, false, parent) ? "OK" : "Unable to create file.", 0x0B);
         }
     }
     else if (line[0] == 'm' && line[1] == 'k' && line[2] == 'd' && line[3] == 'i' && line[4] == 'r' && line[5] == ' ') {
@@ -320,12 +416,12 @@ namespace shell {
     create_file("README", static_cast<uint32_t>(kyron_root - entries), "KyronOS system root.\n");
     create_file("README", static_cast<uint32_t>(usr - entries), "System software and libraries.\n");
     create_file("README", static_cast<uint32_t>(usr_bin - entries), "Installed commands live here.\n");
-    create_file("motd", static_cast<uint32_t>(system - entries), "Welcome to KyronOS Alpha 2.\n");
+    create_file("motd", static_cast<uint32_t>(system - entries), "Welcome to KyronOS.\n");
     create_file("hostname", static_cast<uint32_t>(etc - entries), hostname);
     create_file("README", static_cast<uint32_t>(boot - entries), "Boot files are managed by the installer.\n");
     create_file("README", static_cast<uint32_t>(dev - entries), "Device nodes appear here.\n");
     create_file("README", static_cast<uint32_t>(tmp - entries), "Temporary files live here.\n");
-    create_file("README", 0, "KyronOS Alpha 2 system root.\n");
+    create_file("README", 0, "KyronOS system root.\n");
     create_file("help", static_cast<uint32_t>(usr_bin - entries), "#!/kyron-shell\n# Edit this command description.\nhelp [command]\n");
     create_file("ls", static_cast<uint32_t>(usr_bin - entries), "#!/kyron-shell\n# List directory entries.\n");
     create_file("cd", static_cast<uint32_t>(usr_bin - entries), "#!/kyron-shell\n# Change the current directory.\n");
@@ -340,7 +436,7 @@ namespace shell {
     current_directory = static_cast<uint32_t>(kyron_home - entries);
     refresh_path();
     char line[128];
-    console::write_line("Welcome to KyronOS Alpha 2.", 0x0F);
+    console::write_line("Welcome to KyronOS.", 0x0F);
     console::write_line("Type 'help' for available commands.", 0x0B);
     while (true) {
         write_prompt_path();

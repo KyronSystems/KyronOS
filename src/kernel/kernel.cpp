@@ -1,4 +1,5 @@
 #include "kernel/console.hpp"
+#include "kernel/mouse.hpp"
 #include "kernel/shell.hpp"
 #include "drivers/pci.hpp"
 #include "drivers/ata_pio.hpp"
@@ -14,10 +15,12 @@ void inspect_pci(const kyron::drivers::PciDevice& device, void* context) {
 }
 
 extern "C" void kmain(uint32_t magic, uint32_t multiboot_info) {
-    (void)multiboot_info;
+    if (magic == 0x36D76289) {
+        console::initialize(multiboot_info);
+    }
     console::clear();
     console::write_line("+----------------------------------------------------------+", 0x09);
-    console::write_line("|                 KYRONOS ALPHA 2                         |", 0x0D);
+    console::write_line("|                      KYRONOS                            |", 0x0D);
     console::write_line("|                 KSFS SYSTEM                             |", 0x0B);
     console::write_line("+----------------------------------------------------------+", 0x09);
     console::write_line("");
@@ -25,6 +28,7 @@ extern "C" void kmain(uint32_t magic, uint32_t multiboot_info) {
         console::write_line("Boot error: invalid Multiboot2 magic.", 0x0C);
         return;
     }
+    mouse::initialize();
     console::write_line("Initializing CPU ........ OK", 0x0B);
     console::write_line("Initializing console ... OK", 0x0B);
     PciSummary pci{};
