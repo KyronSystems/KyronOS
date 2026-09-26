@@ -46,12 +46,12 @@ bool Installer::install(BlockDevice& device, const char* hostname) {
         !add_directory(filesystem, root, "bin", bin) ||
         !add_directory(filesystem, root, "usr", usr) ||
         !add_directory(filesystem, usr, "bin", usr_bin)) return false;
-    if (!add_file(filesystem, root, "README", "KyronOS Alpha 2 system root.\n") ||
+    if (!add_file(filesystem, root, "README", "KyronOS system root.\n") ||
         !add_file(filesystem, kyron, "README", "KyronOS system files.\n") ||
         !add_file(filesystem, boot, "README", "Boot files are managed by the installer.\n") ||
-        !add_file(filesystem, system, "motd", "Welcome to KyronOS Alpha 2.\n") ||
+        !add_file(filesystem, system, "motd", "Welcome to KyronOS.\n") ||
         !add_file(filesystem, etc, "hostname", hostname) ||
-        !add_file(filesystem, etc, "version", "KyronOS Alpha 2\n") ||
+        !add_file(filesystem, etc, "version", "KyronOS\n") ||
         !add_file(filesystem, home, "README", "User home directories live here.\n") ||
         !add_file(filesystem, tmp, "README", "Temporary files live here.\n") ||
         !add_file(filesystem, dev, "README", "Device nodes appear here.\n") ||
