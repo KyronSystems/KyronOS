@@ -1,0 +1,1 @@
+The console glyph data in console-vga16.psf is from the Lat15-VGA16 console font distributed by Debian's console-setup package. The package copyright notice states: "All console fonts are public domain by nature."
