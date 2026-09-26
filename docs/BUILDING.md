@@ -10,3 +10,5 @@ For Windows development without WSL2, see [WINDOWS.md](WINDOWS.md).
 6. Run `make debug` to prepare the image for a separately configured VirtualBox debug session.
 
 The build uses GRUB Multiboot2 and NASM. Fedora names the rescue command `grub2-mkrescue`; the Makefile detects both Fedora and Debian/Ubuntu names. A host compiler may produce the bootstrap ELF, but a freestanding cross compiler should be used for future kernel expansion. The setup script never installs packages automatically.
+
+The ISO includes `bg.jpg` as the desktop wallpaper. GRUB's `jpeg` and `gfxterm` modules draw it before handing the 32-bit framebuffer to the kernel; replace `bg.jpg` before running `make iso` to use another JPEG wallpaper. The kernel displays its fixed Terminal window over the preserved framebuffer and accepts PS/2 mouse input.
