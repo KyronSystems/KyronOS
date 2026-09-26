@@ -31,6 +31,9 @@ $(BUILD)/console.o: src/kernel/console.cpp | $(BUILD)
 $(BUILD)/keyboard.o: src/kernel/keyboard.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(BUILD)/mouse.o: src/kernel/mouse.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(BUILD)/usb_keyboard.o: src/drivers/usb_keyboard.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -49,7 +52,7 @@ $(BUILD)/kernel.o: src/kernel/kernel.cpp | $(BUILD)
 $(BUILD)/runtime.o: src/kernel/runtime.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD)/kyronos.kernel: $(BUILD)/entry.o $(BUILD)/console.o $(BUILD)/keyboard.o $(BUILD)/usb_keyboard.o $(BUILD)/pci.o $(BUILD)/ata_pio.o $(BUILD)/shell.o $(BUILD)/kernel.o $(BUILD)/runtime.o
+$(BUILD)/kyronos.kernel: $(BUILD)/entry.o $(BUILD)/console.o $(BUILD)/keyboard.o $(BUILD)/mouse.o $(BUILD)/usb_keyboard.o $(BUILD)/pci.o $(BUILD)/ata_pio.o $(BUILD)/shell.o $(BUILD)/kernel.o $(BUILD)/runtime.o
 	$(LD) $(LDFLAGS) -o $@ $^
 
 iso: kernel
