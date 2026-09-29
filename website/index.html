@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070a0f">
+<title>KyronOS — A small operating system</title>
+<meta name="description" content="KyronOS is a small, text-first experimental operating system for x86 PCs.">
+<style>
+:root{
+  --bg:#070a0f; --panel:#0d121a; --panel2:#101722; --line:#202b39;
+  --text:#e9eef5; --muted:#8e9bab; --accent:#8bd5ff; --accent2:#b7f7c5;
+  --green:#83e0a2; --red:#ff8b8b; --shadow:0 24px 70px rgba(0,0,0,.38);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:
+    radial-gradient(900px 500px at 70% -10%,rgba(86,161,210,.14),transparent 60%),
+    radial-gradient(700px 450px at 10% 20%,rgba(116,225,158,.06),transparent 60%),
+    var(--bg);color:var(--text);font:15px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+a{color:inherit;text-decoration:none}
+.wrap{width:min(1120px,calc(100% - 36px));margin:auto}
+nav{
+  position:sticky;top:0;z-index:20;border-bottom:1px solid rgba(255,255,255,.07);
+  background:rgba(7,10,15,.78);backdrop-filter:blur(16px)
+}
+.navin{height:68px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:11px;align-items:center;font-weight:800;letter-spacing:.02em}
+.mark{
+  width:30px;height:30px;border:1px solid #6e8195;border-radius:8px;display:grid;place-items:center;
+  font:700 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent)
+}
+.links{display:flex;gap:24px;color:var(--muted);font-size:14px}
+.links a:hover{color:var(--text)}
+.hero{padding:112px 0 82px}
+.eyebrow{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(48px,8vw,92px);line-height:.95;letter-spacing:-.055em;margin:18px 0 22px}
+.hero p{max-width:690px;color:#aab5c2;font-size:19px;margin:0 0 32px}
+.actions{display:flex;gap:12px;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:11px 17px;border-radius:9px;
+  border:1px solid var(--line);background:var(--panel);font-weight:700;transition:.18s
+}
+.btn:hover{transform:translateY(-1px);border-color:#3b4d62}
+.btn.primary{background:#e9f5ff;color:#081018;border-color:#e9f5ff}
+.hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:44px;align-items:center}
+.terminal{
+  border:1px solid #263343;border-radius:13px;background:#080b10;box-shadow:var(--shadow);overflow:hidden;
+  transform:perspective(900px) rotateY(-2deg)
+}
+.termbar{height:38px;border-bottom:1px solid #202833;display:flex;align-items:center;padding:0 13px;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;background:#394553}.termtitle{margin-left:5px;color:#667383;font:12px ui-monospace,monospace}
+.screen{padding:22px 20px 25px;font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;min-height:330px;color:#b7c4d2}
+.prompt{color:var(--green)}.cmd{color:#e6edf5}.dim{color:#657384}.cyan{color:var(--accent)}
+.cursor{display:inline-block;width:7px;height:15px;background:#dcefff;vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+section{padding:76px 0;border-top:1px solid rgba(255,255,255,.06)}
+h2{font-size:34px;letter-spacing:-.035em;margin:0 0 10px}
+.lead{color:var(--muted);max-width:700px;margin:0 0 32px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card{padding:22px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,var(--panel2),var(--panel));}
+.card .icon{font:20px ui-monospace,monospace;color:var(--accent);margin-bottom:13px}
+.card h3{margin:0 0 6px;font-size:17px}.card p{margin:0;color:var(--muted);font-size:14px}
+.releases{
+  display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center;
+  padding:25px;border:1px solid var(--line);border-radius:13px;background:var(--panel)
+}
+.release-title{font:700 20px ui-monospace,SFMono-Regular,Menlo,monospace}
+.release-meta{color:var(--muted);font-size:13px;margin-top:4px}
+.badge{font:700 11px ui-monospace,monospace;padding:5px 8px;border:1px solid #365044;color:var(--green);border-radius:999px;margin-left:8px}
+.command-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.command{border:1px solid var(--line);border-radius:9px;background:#090d13;padding:12px 14px;font:13px ui-monospace,monospace;color:#bdc9d5}
+.command span{color:var(--accent)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.code{
+  background:#080b10;border:1px solid var(--line);border-radius:11px;padding:18px;
+  font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;color:#aebdca;overflow:auto
+}
+.note{color:var(--muted);font-size:13px}
+footer{padding:50px 0 70px;color:#718091;border-top:1px solid rgba(255,255,255,.06)}
+.footerin{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+@media(max-width:800px){
+  .hero-grid,.split{grid-template-columns:1fr}.cards{grid-template-columns:1fr}
+  .hero{padding:76px 0 55px}.links{display:none}.terminal{transform:none}
+  h1{font-size:60px}.releases{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap navin">
+    <a class="brand" href="#"><span class="mark">K</span><span>KyronOS</span></a>
+    <div class="links">
+      <a href="#experience">Experience</a><a href="#features">Features</a><a href="#releases">Releases</a><a href="#build">Build</a>
+    </div>
+    <a class="btn" href="https://github.com/KyronSystems/KyronOS" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</nav>
+
+<main>
+<section class="hero" style="border:0">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">An experimental operating system</div>
+      <h1>Small.<br>Direct.<br>Kyron.</h1>
+      <p>KyronOS is a small, text-first operating system for x86 PCs. Boot it, drop into the shell, and explore an OS being built from the ground up.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/KyronSystems/KyronOS/releases/latest" target="_blank" rel="noopener">Get the latest release ↗</a>
+        <a class="btn" href="https://github.com/KyronSystems/KyronOS" target="_blank" rel="noopener">Explore the source</a>
+      </div>
+    </div>
+    <div class="terminal" aria-label="KyronOS terminal preview">
+      <div class="termbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="termtitle">kyron — tty0</span></div>
+      <div class="screen">
+        <div class="dim">KyronOS</div>
+        <div class="dim">────────────────────────────</div>
+        <br>
+        <div><span class="prompt">[kyron]:~#</span> <span class="cmd">help</span></div>
+        <div class="dim">available commands:</div>
+        <div class="cyan">help clear version about echo</div>
+        <div class="cyan">ls cd pwd go back home root</div>
+        <div class="cyan">touch mkdir rmdir write append cat rm</div>
+        <div class="cyan">add user · switch user</div>
+        <div class="cyan">devices mem reboot shutdown</div>
+        <br>
+        <div><span class="prompt">[kyron]:~#</span> <span class="cmd">ls</span></div>
+        <div>projects&nbsp;&nbsp;&nbsp; docs&nbsp;&nbsp;&nbsp; welcome.txt</div>
+        <br>
+        <div><span class="prompt">[kyron]:~#</span> <span class="cursor"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="experience">
+<div class="wrap">
+  <h2>Get a feel for the OS.</h2>
+  <p class="lead">No desktop environment hiding the fundamentals. KyronOS boots into a VGA terminal and gives you a simple shell to interact with the system.</p>
+  <div class="cards">
+    <article class="card"><div class="icon">01</div><h3>Boot</h3><p>GRUB Multiboot2 gets the system running from an ISO on x86 PCs.</p></article>
+    <article class="card"><div class="icon">02</div><h3>Shell</h3><p>Navigate directories, create and edit files, inspect memory and devices, manage users, and control the machine.</p></article>
+    <article class="card"><div class="icon">03</div><h3>Explore</h3><p>Experiment with a RAM-backed filesystem prototype and the foundations of KyronOS itself.</p></article>
+  </div>
+</div>
+</section>
+
+<section id="features">
+<div class="wrap">
+  <h2>What is already there</h2>
+  <p class="lead">The project is intentionally close to the metal. These are the pieces currently forming the foundation.</p>
+  <div class="cards">
+    <article class="card"><div class="icon">⌁</div><h3>VGA console</h3><p>Scrolling, cursor tracking, keyboard input, Shift handling and Tab completion.</p></article>
+    <article class="card"><div class="icon">⌂</div><h3>User homes</h3><p>Users have home directories under <code>/home</code>, with <code>~</code> available in the shell prompt.</p></article>
+    <article class="card"><div class="icon">▦</div><h3>KSFS foundations</h3><p>KSFS superblock validation and a generic block-device interface are in place.</p></article>
+  </div>
+</div>
+</section>
+
+<section id="releases">
+<div class="wrap">
+  <h2>Releases</h2>
+  <p class="lead">Downloadable KyronOS builds live on GitHub. The buttons below always point at the repository's release pages, so this page does not go stale when a new version ships.</p>
+  <div class="releases">
+    <div>
+      <div class="release-title">Latest KyronOS release <span class="badge">GITHUB</span></div>
+      <div class="release-meta">Release notes, ISO assets, checksums and older versions.</div>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/KyronSystems/KyronOS/releases/latest" target="_blank" rel="noopener">Latest release ↗</a>
+      <a class="btn" href="https://github.com/KyronSystems/KyronOS/releases" target="_blank" rel="noopener">All releases</a>
+    </div>
+  </div>
+</div>
+</section>
+
+<section id="build">
+<div class="wrap">
+  <h2>Try it yourself.</h2>
+  <p class="lead">Build the ISO locally, then run it in VirtualBox. The project also supports EFI mode.</p>
+  <div class="split">
+    <div class="code"><span style="color:#83e0a2">$</span> ./setup.sh<br><span style="color:#83e0a2">$</span> make iso<br><span style="color:#83e0a2">$</span> make run</div>
+    <div>
+      <p><strong>Generated image</strong><br><code>build/kyronos.iso</code></p>
+      <p class="note">For EFI in VirtualBox: <code>make run EFI=on</code>. See the repository documentation for build requirements and platform details.</p>
+    </div>
+  </div>
+  <div style="height:18px"></div>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/KyronSystems/KyronOS/blob/main/docs/BUILDING.md" target="_blank" rel="noopener">Build documentation ↗</a>
+    <a class="btn" href="https://github.com/KyronSystems/KyronOS/blob/main/docs/ROADMAP.md" target="_blank" rel="noopener">Roadmap</a>
+    <a class="btn" href="https://github.com/KyronSystems/KyronOS/blob/main/docs/KSFS.md" target="_blank" rel="noopener">KSFS</a>
+  </div>
+</div>
+</section>
+
+<section>
+<div class="wrap">
+  <h2>Built from the ground up.</h2>
+  <p class="lead">KyronOS is an ongoing systems project. Storage controllers, partition discovery, persistent installation, and a complete on-disk filesystem tree are still part of the road ahead.</p>
+  <a class="btn" href="https://github.com/KyronSystems/KyronOS" target="_blank" rel="noopener">Follow development on GitHub ↗</a>
+</div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap footerin">
+    <div><strong>KyronOS</strong><br><span>Small, text-first, experimental.</span></div>
+    <div><a href="https://github.com/KyronSystems/KyronOS/releases" target="_blank" rel="noopener">Releases</a> · <a href="https://github.com/KyronSystems/KyronOS" target="_blank" rel="noopener">Source</a> · <a href="https://github.com/KyronSystems/KyronOS/issues" target="_blank" rel="noopener">Issues</a></div>
+  </div>
+</footer>
+</body>
+</html>
