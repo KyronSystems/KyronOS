@@ -28,6 +28,20 @@ int main() {
     assert(superblock.inode_table_blocks == 2);
     assert(superblock.free_blocks == 60);
 
+    MemoryDevice sliced_device;
+    uint8_t boot_marker[kyron::fs::KSFS_BLOCK_SIZE];
+    std::memset(boot_marker, 0x5A, sizeof(boot_marker));
+    assert(sliced_device.write(0, boot_marker));
+    kyron::fs::BlockDeviceSlice data_partition;
+    assert(data_partition.configure(sliced_device, 4, 60));
+    kyron::fs::FileSystem sliced_filesystem(data_partition);
+    assert(sliced_filesystem.format(32));
+    uint8_t preserved_boot_marker[kyron::fs::KSFS_BLOCK_SIZE]{};
+    assert(sliced_device.read(0, preserved_boot_marker));
+    assert(std::memcmp(boot_marker, preserved_boot_marker, sizeof(boot_marker)) == 0);
+    kyron::fs::FileSystem sliced_remount(data_partition);
+    assert(sliced_remount.mount());
+
     kyron::fs::FileSystem filesystem(device);
     assert(filesystem.format(32));
     uint32_t documents = 0;
@@ -56,6 +70,17 @@ int main() {
     assert(remounted.read_file(found, contents, sizeof(contents), size));
     assert(size == 10);
     assert(std::strcmp(contents, "persistent") == 0);
+    assert(remounted.overwrite_file(found, "edited", 6));
+    char empty_contents[1]{};
+    uint32_t empty_file = 0;
+    assert(remounted.create_file(documents, "empty.txt", "", 0, empty_file));
+    kyron::fs::FileSystem edited_mount(device);
+    assert(edited_mount.mount());
+    assert(edited_mount.read_file(found, contents, sizeof(contents), size));
+    assert(size == 6);
+    assert(std::memcmp(contents, "edited", size) == 0);
+    assert(edited_mount.read_file(empty_file, empty_contents, sizeof(empty_contents), size));
+    assert(size == 0);
     char large_data[5000];
     std::memset(large_data, 'K', sizeof(large_data));
     uint32_t large_file = 0;
@@ -78,5 +103,13 @@ int main() {
     char hostname_contents[32]{};
     assert(installed.read_file(hostname, hostname_contents, sizeof(hostname_contents), size));
     assert(std::strcmp(hostname_contents, "kyron-host") == 0);
+    uint32_t home = 0;
+    assert(installed.find(kyron::fs::KSFS_ROOT_INODE, "home", home));
+    uint32_t home_user = 0;
+    assert(installed.find(home, "kyron", home_user));
+    uint32_t notes = 0;
+    assert(installed.find(home_user, "Notes", notes));
+    uint32_t note_file = 0;
+    assert(installed.find(notes, "Notes.txt", note_file));
     return 0;
 }
