@@ -37,6 +37,7 @@ public:
     bool resolve_path(uint32_t starting_inode, const char* path, uint32_t& inode) const;
     bool create_directory(uint32_t parent, const char* name, uint32_t& inode);
     bool create_file(uint32_t parent, const char* name, const char* data, uint32_t size, uint32_t& inode);
+    bool overwrite_file(uint32_t inode, const char* data, uint32_t size);
     bool read_file(uint32_t inode, void* buffer, uint32_t capacity, uint32_t& size) const;
     bool remove(uint32_t parent, const char* name);
     bool list_directory(uint32_t inode, DirectoryVisitor visitor, void* context) const;
