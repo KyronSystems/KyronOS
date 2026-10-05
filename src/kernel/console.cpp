@@ -1,4 +1,5 @@
 #include "kernel/console.hpp"
+#include "graphics/graphics.hpp"
 
 namespace {
 volatile uint16_t* const vga = reinterpret_cast<volatile uint16_t*>(0xB8000);
@@ -19,6 +20,7 @@ uint8_t mouse_buttons = 0;
 uint32_t pointer_cell = 0;
 uint16_t pointer_under = 0;
 bool pointer_visible = false;
+console::MouseClickHandler mouse_click_handler = nullptr;
 
 uint32_t mouse_column() { return mouse_x / 9; }
 uint32_t mouse_row() { return mouse_y / 16; }
@@ -63,6 +65,7 @@ void update_cursor() {
     outb(0x3D5, static_cast<uint8_t>(position));
     outb(0x3D4, 0x0E);
     outb(0x3D5, static_cast<uint8_t>(position >> 8));
+    graphics::set_cursor(row, column, true);
 }
 
 void scroll() {
@@ -73,6 +76,7 @@ void scroll() {
         vga[24 * 80 + screen_column] = 0x0700 | ' ';
     row = 24;
     column = 0;
+    graphics::scroll();
 }
 
 void put(char character, uint8_t color) {
@@ -80,6 +84,7 @@ void put(char character, uint8_t color) {
     if (character == '\n') { ++row; column = 0; if (row >= 25) scroll(); update_cursor(); show_mouse_pointer(); return; }
     if (column >= 80) { ++row; column = 0; if (row >= 25) scroll(); }
     vga[row * 80 + column] = static_cast<uint16_t>(character) | (static_cast<uint16_t>(color) << 8);
+    graphics::draw_cell(row, column, character, color);
     ++column;
     update_cursor();
     show_mouse_pointer();
@@ -87,12 +92,13 @@ void put(char character, uint8_t color) {
 }
 
 namespace console {
-void initialize(uint32_t) {}
+void initialize(uint32_t multiboot_info) { graphics::initialize(multiboot_info); }
 void clear() {
     hide_mouse_pointer();
     for (uint16_t index = 0; index < 80 * 25; ++index) vga[index] = 0x0700 | ' ';
     row = 0; column = 0;
     input_length = 0;
+    graphics::clear();
     update_cursor();
     show_mouse_pointer();
 }
@@ -104,6 +110,7 @@ void backspace() {
     hide_mouse_pointer();
     --column;
     vga[row * 80 + column] = 0x0700 | ' ';
+    graphics::draw_cell(row, column, ' ', 0x07);
     update_cursor();
     show_mouse_pointer();
 }
@@ -130,6 +137,7 @@ void input_update(const char* text, uint32_t length, uint32_t cursor) {
         char character = index < length ? text[index] : ' ';
         uint32_t cell = input_column + index;
         vga[input_row * 80 + cell] = 0x0700 | static_cast<uint8_t>(character);
+        graphics::draw_cell(input_row, cell, character, 0x07);
         if (index < sizeof(input_text)) input_text[index] = character;
     }
     input_length = length;
@@ -164,8 +172,10 @@ void mouse_event(int32_t delta_x, int32_t delta_y, uint8_t buttons) {
     int32_t speed_y = 2 + (delta_y < 0 ? -delta_y : delta_y) / 8;
     if (speed_x > 5) speed_x = 5;
     if (speed_y > 5) speed_y = 5;
-    int32_t horizontal_limit = 719;
-    int32_t vertical_limit = 399;
+    uint32_t screen_width = graphics::width();
+    uint32_t screen_height = graphics::height();
+    int32_t horizontal_limit = screen_width ? static_cast<int32_t>(screen_width - 1) : 719;
+    int32_t vertical_limit = screen_height ? static_cast<int32_t>(screen_height - 1) : 399;
     int32_t next_x = static_cast<int32_t>(mouse_x) + delta_x * speed_x;
     int32_t next_y = static_cast<int32_t>(mouse_y) - delta_y * speed_y;
     if (next_x < 0) next_x = 0;
@@ -174,8 +184,10 @@ void mouse_event(int32_t delta_x, int32_t delta_y, uint8_t buttons) {
     if (next_y > vertical_limit) next_y = vertical_limit;
     mouse_x = static_cast<uint32_t>(next_x);
     mouse_y = static_cast<uint32_t>(next_y);
+    graphics::set_mouse(mouse_x, mouse_y);
     bool left_down = (buttons & 1) != 0;
     bool was_left_down = (mouse_buttons & 1) != 0;
+    bool left_pressed = left_down && !was_left_down;
     uint32_t cell_column = mouse_column();
     uint32_t cell_row = mouse_row();
     if (input_active && left_down && cell_row == input_row && cell_column >= input_column) {
@@ -192,7 +204,9 @@ void mouse_event(int32_t delta_x, int32_t delta_y, uint8_t buttons) {
     if (!left_down && was_left_down) mouse_dragging = false;
     mouse_buttons = buttons;
     show_mouse_pointer();
+    if (left_pressed && mouse_click_handler) mouse_click_handler(mouse_x, mouse_y);
 }
+void set_mouse_click_handler(MouseClickHandler handler) { mouse_click_handler = handler; }
 bool input_mouse_state(uint32_t& cursor, uint32_t& selection_start, uint32_t& selection_end) {
     if (!input_active) return false;
     uint32_t cell_column = mouse_column();
@@ -235,6 +249,11 @@ void editor_draw(const char* title, const char* text, uint32_t length, uint32_t 
     row = static_cast<uint8_t>(1 + position / 80);
     column = static_cast<uint8_t>(position % 80);
     update_cursor();
+    for (uint32_t screen_row = 0; screen_row < 25; ++screen_row)
+        for (uint32_t screen_column = 0; screen_column < 80; ++screen_column) {
+            uint16_t cell = vga[screen_row * 80 + screen_column];
+            graphics::draw_cell(screen_row, screen_column, static_cast<char>(cell & 0xFF), static_cast<uint8_t>(cell >> 8));
+        }
     show_mouse_pointer();
 }
 }
