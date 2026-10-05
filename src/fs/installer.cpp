@@ -31,6 +31,8 @@ bool Installer::install(BlockDevice& device, const char* hostname) {
     uint32_t system = 0;
     uint32_t etc = 0;
     uint32_t home = 0;
+        uint32_t home_user = 0;
+        uint32_t notes = 0;
     uint32_t tmp = 0;
     uint32_t dev = 0;
     uint32_t bin = 0;
@@ -41,6 +43,8 @@ bool Installer::install(BlockDevice& device, const char* hostname) {
         !add_directory(filesystem, root, "system", system) ||
         !add_directory(filesystem, root, "etc", etc) ||
         !add_directory(filesystem, root, "home", home) ||
+        !add_directory(filesystem, home, "kyron", home_user) ||
+        !add_directory(filesystem, home_user, "Notes", notes) ||
         !add_directory(filesystem, root, "tmp", tmp) ||
         !add_directory(filesystem, root, "dev", dev) ||
         !add_directory(filesystem, root, "bin", bin) ||
@@ -53,6 +57,8 @@ bool Installer::install(BlockDevice& device, const char* hostname) {
         !add_file(filesystem, etc, "hostname", hostname) ||
         !add_file(filesystem, etc, "version", "KyronOS\n") ||
         !add_file(filesystem, home, "README", "User home directories live here.\n") ||
+        !add_file(filesystem, home_user, "Welcome.txt", "Welcome to KyronOS.\nYour files are stored on this disk.\n") ||
+        !add_file(filesystem, notes, "Notes.txt", "") ||
         !add_file(filesystem, tmp, "README", "Temporary files live here.\n") ||
         !add_file(filesystem, dev, "README", "Device nodes appear here.\n") ||
         !add_file(filesystem, bin, "README", "Compatibility command links live here.\n") ||
