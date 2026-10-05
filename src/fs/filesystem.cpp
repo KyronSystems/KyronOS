@@ -147,6 +147,7 @@ bool FileSystem::create_directory(uint32_t parent, const char* name, uint32_t& i
 
 bool FileSystem::create_file(uint32_t parent, const char* name, const char* data, uint32_t size, uint32_t& inode) {
     uint32_t required_blocks = data ? (size + KSFS_BLOCK_SIZE - 1) / KSFS_BLOCK_SIZE : 1;
+    if (data && required_blocks == 0) required_blocks = 1;
     if (!is_mounted || !valid_name(name) || required_blocks == 0 || required_blocks > 12 || find(parent, name, inode)) return false;
     Inode parent_inode{};
     if (!::read_inode(*this, parent, parent_inode) || parent_inode.mode != KSFS_DIRECTORY_MODE) return false;
@@ -204,6 +205,65 @@ bool FileSystem::create_file(uint32_t parent, const char* name, const char* data
     if (!device.write(0, superblock)) return false;
     inode = free_inode;
     return true;
+}
+
+bool FileSystem::overwrite_file(uint32_t inode_number, const char* data, uint32_t size) {
+    if (!is_mounted || (!data && size != 0)) return false;
+    Inode inode{};
+    if (!::read_inode(*this, inode_number, inode) || inode.mode != KSFS_FILE_MODE) return false;
+    uint32_t required_blocks = (size + KSFS_BLOCK_SIZE - 1) / KSFS_BLOCK_SIZE;
+    if (required_blocks == 0) required_blocks = 1;
+    if (required_blocks > 12) return false;
+
+    uint8_t bitmap[KSFS_BLOCK_SIZE]{};
+    if (!device.read(metadata.bitmap_block, bitmap)) return false;
+    uint32_t replacement_blocks[12]{};
+    uint32_t reused_blocks = required_blocks < inode.data_blocks ? required_blocks : inode.data_blocks;
+    for (uint32_t index = 0; index < reused_blocks; ++index) replacement_blocks[index] = inode.blocks[index];
+    uint32_t allocated = 0;
+    for (uint32_t block = 2 + metadata.inode_table_blocks;
+         block < metadata.total_blocks && reused_blocks + allocated < required_blocks; ++block) {
+        if ((bitmap[block / 8] & (1u << (block % 8))) == 0) replacement_blocks[reused_blocks + allocated++] = block;
+    }
+    if (reused_blocks + allocated != required_blocks) return false;
+
+    uint8_t contents[KSFS_BLOCK_SIZE]{};
+    for (uint32_t index = 0; index < required_blocks; ++index) {
+        for (uint32_t byte = 0; byte < KSFS_BLOCK_SIZE; ++byte) contents[byte] = 0;
+        uint32_t offset = index * KSFS_BLOCK_SIZE;
+        if (offset < size) {
+            uint32_t chunk = size - offset;
+            if (chunk > KSFS_BLOCK_SIZE) chunk = KSFS_BLOCK_SIZE;
+            copy_bytes(contents, data + offset, chunk);
+        }
+        if (!device.write(replacement_blocks[index], contents)) return false;
+    }
+
+    for (uint32_t index = 0; index < allocated; ++index) {
+        uint32_t block = replacement_blocks[reused_blocks + index];
+        bitmap[block / 8] |= static_cast<uint8_t>(1u << (block % 8));
+    }
+    for (uint32_t index = required_blocks; index < inode.data_blocks; ++index) {
+        uint32_t block = inode.blocks[index];
+        bitmap[block / 8] &= static_cast<uint8_t>(~(1u << (block % 8)));
+    }
+
+    uint32_t old_block_count = inode.data_blocks;
+    inode.size = size;
+    inode.data_blocks = required_blocks;
+    for (uint32_t index = 0; index < 12; ++index) inode.blocks[index] = index < required_blocks ? replacement_blocks[index] : 0;
+    uint8_t inode_block[KSFS_BLOCK_SIZE]{};
+    uint32_t inode_block_number = metadata.inode_table_block + (inode_number - 1) * KSFS_INODE_SIZE / KSFS_BLOCK_SIZE;
+    if (!device.read(inode_block_number, inode_block)) return false;
+    copy_bytes(inode_block + ((inode_number - 1) * KSFS_INODE_SIZE) % KSFS_BLOCK_SIZE, &inode, sizeof(inode));
+    if (!device.write(inode_block_number, inode_block) || !device.write(metadata.bitmap_block, bitmap)) return false;
+
+    if (required_blocks >= old_block_count) metadata.free_blocks -= required_blocks - old_block_count;
+    else metadata.free_blocks += old_block_count - required_blocks;
+    metadata.checksum = checksum(metadata);
+    fill_bytes(inode_block, 0, sizeof(inode_block));
+    copy_bytes(inode_block, &metadata, sizeof(metadata));
+    return device.write(0, inode_block);
 }
 
 bool FileSystem::remove(uint32_t parent, const char* name) {
