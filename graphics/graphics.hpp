@@ -3,6 +3,7 @@
 
 namespace graphics {
 bool initialize(uint32_t multiboot_info);
+void draw_pixel(uint32_t x, uint32_t y, uint32_t rgb);
 void clear();
 void draw_cell(uint32_t row, uint32_t column, char character, uint8_t attribute);
 void scroll();
