@@ -31,3 +31,14 @@ bool decode_boot_report(const uint8_t* report, uint32_t length, Sink& sink) {
     return true;
 }
 }
+
+namespace usb::mouse {
+bool decode_boot_report(const uint8_t* report, uint32_t length, Sink& sink) {
+    if (!report || length < 3) return false;
+    int32_t delta_x = static_cast<int8_t>(report[1]);
+    int32_t delta_y = static_cast<int8_t>(report[2]);
+    int8_t wheel = length >= 4 ? static_cast<int8_t>(report[3]) : 0;
+    sink.movement(delta_x, delta_y, report[0], wheel);
+    return true;
+}
+}
