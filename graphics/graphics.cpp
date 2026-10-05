@@ -1,4 +1,4 @@
-#include "kernel/graphics.hpp"
+#include "graphics.hpp"
 
 namespace {
 constexpr uint32_t columns = 80;
@@ -252,12 +252,66 @@ bool pointer_overlaps(uint32_t x, uint32_t y, uint32_t width_value, uint32_t hei
 }
 
 void draw_title() {
-    const char title[] = "KyronOS Terminal";
+    const char title[] = "Terminal";
     uint32_t x = window_x + 22;
     uint32_t y = window_y + (title_height - font_height * glyph_scale) / 2;
     for (uint32_t index = 0; title[index]; ++index) {
         draw_glyph(x, y, title[index], 0x0F);
         x += (font_width + 1) * glyph_scale;
+    }
+}
+
+void draw_desktop_chrome() {
+    const uint32_t bar_height = 32;
+    const uint32_t dock_height = 62;
+    const uint32_t dock_width = 370;
+    for (uint32_t y = 0; y < bar_height; ++y) {
+        for (uint32_t x = 0; x < framebuffer.width; ++x)
+            put_pixel(x, y, mix(background_at(x, y, true), 0x101925, 170));
+    }
+    for (uint32_t x = 10; x < 34; ++x) {
+        for (uint32_t y = 5; y < 27; ++y) {
+            int32_t dx = static_cast<int32_t>(x) - 22;
+            int32_t dy = static_cast<int32_t>(y) - 16;
+            if (dx * dx + dy * dy <= 110) put_pixel(x, y, mix(0x48D7D0, 0x173647, 70));
+        }
+    }
+    draw_glyph(17, 10, 'K', 0x0F);
+    const char* menu = "KYRON     File     Edit     View     Window";
+    uint32_t menu_x = 42;
+    uint32_t menu_y = (bar_height - font_height * glyph_scale) / 2;
+    for (uint32_t index = 0; menu[index]; ++index) {
+        draw_glyph(menu_x, menu_y, menu[index], menu[index] == 'K' ? 0x0B : 0x0F);
+        menu_x += (font_width + 1) * glyph_scale;
+    }
+    uint32_t dock_x = framebuffer.width > dock_width ? (framebuffer.width - dock_width) / 2 : 0;
+    uint32_t dock_y = framebuffer.height > dock_height + 8 ? framebuffer.height - dock_height - 8 : 0;
+    for (uint32_t y = 0; y < dock_height; ++y) {
+        for (uint32_t x = 0; x < dock_width && dock_x + x < framebuffer.width; ++x) {
+            int32_t local_x = static_cast<int32_t>(x);
+            int32_t local_y = static_cast<int32_t>(y);
+            int32_t nearest_x = local_x < 20 ? 20 : local_x >= static_cast<int32_t>(dock_width - 20) ? static_cast<int32_t>(dock_width - 21) : local_x;
+            int32_t nearest_y = local_y < 18 ? 18 : local_y >= static_cast<int32_t>(dock_height - 18) ? static_cast<int32_t>(dock_height - 19) : local_y;
+            int32_t dx = local_x - nearest_x;
+            int32_t dy = local_y - nearest_y;
+            if (dx * dx + dy * dy <= 324)
+                put_pixel(dock_x + x, dock_y + y, mix(background_at(dock_x + x, dock_y + y, true), 0x162334, 158));
+        }
+    }
+    const char icons[] = {'N', 'F', 'S', 'I', '>'};
+    const uint32_t colors[] = {0xE6B854, 0x45BFD2, 0x62C693, 0x829BEA, 0xDB7E86};
+    uint32_t icon_start = dock_x + (dock_width - 5 * 58) / 2 + 8;
+    for (uint32_t index = 0; index < 5; ++index) {
+        uint32_t x = icon_start + index * 58;
+        uint32_t y = dock_y + 10;
+        for (uint32_t py = 0; py < 40; ++py) {
+            for (uint32_t px = 0; px < 40; ++px) {
+                uint32_t edge = px < 2 || px > 37 || py < 2 || py > 37 ? 0xF4F7FC : colors[index];
+                put_pixel(x + px, y + py, mix(edge, 0xFFFFFF, py < 5 ? 42 : 0));
+            }
+        }
+        draw_glyph(x + 15, y + 10, icons[index], 0x0F);
+        put_pixel(x + 19, dock_y + 54, 0xEAF5FF);
     }
 }
 
@@ -370,9 +424,9 @@ bool initialize(uint32_t multiboot_info) {
                 }
                 blur_background();
                 window_x = width_value / 40;
-                window_y = height_value / 40;
+                window_y = height_value / 12;
                 window_width = width_value - 2 * window_x;
-                window_height = height_value - 2 * window_y;
+                window_height = height_value - window_y - height_value / 8;
                 uint32_t inner_width = window_width - 48;
                 uint32_t inner_height = window_height - 92;
                 cell_width = inner_width / columns;
@@ -403,6 +457,15 @@ bool initialize(uint32_t multiboot_info) {
     return false;
 }
 
+void draw_pixel(uint32_t x, uint32_t y, uint32_t rgb) {
+    if (!framebuffer.active) return;
+    bool overlaps_pointer = pointer_visible && x >= static_cast<uint32_t>(pointer_x) && y >= static_cast<uint32_t>(pointer_y)
+        && x < static_cast<uint32_t>(pointer_x) + pointer_width && y < static_cast<uint32_t>(pointer_y) + pointer_height;
+    if (overlaps_pointer) hide_mouse();
+    put_pixel(x, y, rgb);
+    if (overlaps_pointer) show_mouse();
+}
+
 void clear() {
     if (!framebuffer.active) return;
     hide_mouse();
@@ -413,6 +476,7 @@ void clear() {
             attributes[row][column] = 0x07;
         }
     draw_frame();
+        draw_desktop_chrome();
     show_mouse();
 }
 
