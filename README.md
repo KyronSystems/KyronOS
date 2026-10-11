@@ -1,3 +1,6 @@
+# KyronOS has been discontinued as of 10/11/2026. No further changes will be made & no more releases will happen. 
+
+
 # KyronOS
 
 KyronOS is an experimental 32-bit x86 operating system with a GRUB Multiboot2 boot path, translucent framebuffer desktop, PS/2 input, IDE/AHCI disk drivers, and KSFS persistent storage.
